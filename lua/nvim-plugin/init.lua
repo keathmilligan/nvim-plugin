@@ -201,6 +201,179 @@ end
 -- The following functions implement a comprehensive keybindings viewer that
 -- displays ALL keybindings from all sources (Neovim core, plugins, user config).
 -- This demonstrates how to query and display Neovim's keymap state programmatically.
+--
+-- IMPORTANT: Built-in Neovim commands (like dd, yy, gg, <C-w>h, etc.) are NOT
+-- exposed through vim.api.nvim_get_keymap() because they're handled internally
+-- by Neovim's command processor. To discover these built-in keybindings, we
+-- parse Neovim's runtime documentation file (doc/index.txt) which comprehensively
+-- documents all ~1,264 built-in keybindings across all modes.
+
+--
+-- IMPORTANT: Understanding Built-in vs. Registered Keybindings
+-- -------------------------------------------------------------
+-- Neovim has two types of keybindings:
+--
+-- 1. REGISTERED KEYMAPS - Explicitly registered via vim.keymap.set(), nvim_set_keymap(),
+--    or legacy :map commands. These are queryable via vim.api.nvim_get_keymap().
+--    Examples: Plugin keymaps, user config keymaps, some Neovim defaults (like Y -> y$)
+--
+-- 2. BUILT-IN COMMANDS - Core Neovim functionality handled internally by the command
+--    processor. These are NOT exposed through keymap APIs but ARE documented in help files.
+--    Examples: dd (delete line), yy (yank line), gg (go to top), <C-w>h (window left)
+--
+-- The vim.api.nvim_get_keymap() API only returns registered keymaps. This means hundreds
+-- of built-in commands (operators, motions, window commands, etc.) are invisible to that API.
+-- To show a complete picture, we parse Neovim's runtime doc/index.txt file, which contains
+-- comprehensive documentation of all ~1,264 built-in keybindings across all modes.
+--
+-- This approach:
+-- - Uses the authoritative source (Neovim's own documentation)
+-- - Automatically matches the installed Neovim version
+-- - Avoids outdated or incorrect third-party documentation
+-- - Requires no manual maintenance when Neovim updates
+
+-- Cache for parsed built-in keybindings (parse once per session for performance)
+local builtin_keymaps_cache = nil
+
+-- Parse Neovim's runtime doc/index.txt to extract built-in keybindings
+-- This is necessary because built-in commands like dd, yy, gg, <C-w>h, etc. are NOT
+-- exposed through vim.api.nvim_get_keymap() - they're handled internally by the command processor.
+-- The index.txt file contains comprehensive documentation of all ~1,264 built-in keybindings.
+-- Returns: { [mode] = { {lhs, desc, source}, ... } }
+local function parse_builtin_keybindings()
+  -- Check cache first
+  if builtin_keymaps_cache then
+    return builtin_keymaps_cache
+  end
+  
+  -- Initialize result structure
+  local builtin_keymaps = {
+    n = {},  -- Normal mode
+    i = {},  -- Insert mode
+    v = {},  -- Visual mode
+    s = {},  -- Select mode
+    o = {},  -- Operator-pending mode
+    t = {},  -- Terminal mode
+    c = {},  -- Command-line mode
+  }
+  
+  -- Locate the runtime index.txt file
+  -- This uses Neovim's runtime path to find the authoritative help documentation
+  local index_files = vim.api.nvim_get_runtime_file('doc/index.txt', false)
+  
+  if #index_files == 0 then
+    -- Fallback: index.txt not found (unusual but handle gracefully)
+    vim.notify("Warning: doc/index.txt not found. Built-in keybindings will not be shown.", vim.log.levels.WARN)
+    builtin_keymaps_cache = builtin_keymaps
+    return builtin_keymaps
+  end
+  
+  -- Read the index.txt file
+  local index_file = index_files[1]
+  local file = io.open(index_file, 'r')
+  
+  if not file then
+    vim.notify("Warning: Could not read " .. index_file, vim.log.levels.WARN)
+    builtin_keymaps_cache = builtin_keymaps
+    return builtin_keymaps
+  end
+  
+  local content = file:read('*all')
+  file:close()
+  
+  -- Parse the file line by line
+  -- Format: |tag|		key		description
+  -- Example: |i_CTRL-W|		CTRL-W		delete word before the cursor
+  -- Example: |dd|			dd		delete N lines [into register x]
+  
+  for line in content:gmatch('[^\r\n]+') do
+    -- Match lines with the pattern: |tag|\t\tkey\t\tdescription
+    -- The tag indicates the mode (e.g., i_CTRL-W for insert mode, no prefix for normal)
+    local tag, key, desc = line:match('|([^|]+)|%s+(%S+)%s+(.+)')
+    
+    if tag and key and desc then
+      -- Determine mode from tag prefix
+      -- Tags like "i_CTRL-W" indicate insert mode
+      -- Tags like "v_d" indicate visual mode
+      -- Tags without prefix (like "dd", "gg") are normal mode
+      local mode = 'n'  -- Default to normal mode
+      
+      if tag:match('^i_') then
+        mode = 'i'
+      elseif tag:match('^v_') then
+        mode = 'v'
+      elseif tag:match('^c_') then
+        mode = 'c'
+      elseif tag:match('^o_') then
+        mode = 'o'
+      elseif tag:match('^t_') then
+        mode = 't'
+      elseif tag:match('^s_') then
+        mode = 's'
+      end
+      
+      -- Clean up the key representation
+      -- Convert documented format (e.g., "CTRL-W") to Neovim keycode format (e.g., "<C-W>")
+      local cleaned_key = key
+      
+      -- CTRL-X -> <C-X>
+      cleaned_key = cleaned_key:gsub('CTRL%-([A-Za-z0-9])', '<C-%1>')
+      
+      -- Handle special cases
+      if cleaned_key == '<NL>' then cleaned_key = '<C-J>' end
+      if cleaned_key == '<CR>' or cleaned_key == 'CTRL-M' then cleaned_key = '<CR>' end
+      if cleaned_key == '<Esc>' or cleaned_key == 'CTRL-[' then cleaned_key = '<Esc>' end
+      if cleaned_key == '<BS>' or cleaned_key == 'CTRL-H' then cleaned_key = '<BS>' end
+      
+      -- Add to the appropriate mode's keybindings
+      table.insert(builtin_keymaps[mode], {
+        lhs = cleaned_key,
+        desc = desc,
+        source = 'builtin',  -- Mark as built-in for source tracking
+      })
+    end
+  end
+  
+  -- Cache the results for future calls
+  builtin_keymaps_cache = builtin_keymaps
+  
+  return builtin_keymaps
+end
+
+-- Extract plugin name from keymap command or description
+-- Attempts to identify which plugin registered a keymap by analyzing the command or description
+-- Returns: plugin name string or empty string if unable to determine
+local function extract_plugin_name(map)
+  -- Check description first for common patterns like "Telescope: Find files"
+  if map.desc and map.desc ~= "" then
+    -- Pattern: "PluginName: ..." or "[PluginName] ..."
+    local plugin = map.desc:match("^([%w%-_]+)%s*:")
+    if plugin then return plugin end
+    
+    plugin = map.desc:match("^%[([%w%-_]+)%]")
+    if plugin then return plugin end
+  end
+  
+  -- Check command/rhs for common patterns
+  if map.rhs and map.rhs ~= "" then
+    -- Pattern: <cmd>PluginName ... or :PluginName
+    local plugin = map.rhs:match("<[Cc][Mm][Dd]>%s*([%w%-_]+)")
+    if plugin then return plugin end
+    
+    plugin = map.rhs:match("^:%s*([%w%-_]+)")
+    if plugin then return plugin end
+    
+    -- Pattern: require("plugin-name") or require('plugin-name')
+    plugin = map.rhs:match('require%s*%(?["\']([%w%-_%.]+)["\']%)?')
+    if plugin then return plugin end
+    
+    -- Pattern: <cmd>lua require("plugin")
+    plugin = map.rhs:match('<[Cc][Mm][Dd]>%s*lua%s+require%s*%(?["\']([%w%-_%.]+)["\']%)?')
+    if plugin then return plugin end
+  end
+  
+  return ""
+end
 
 -- Map mode character to human-readable name
 -- Neovim uses single-character abbreviations for modes:
@@ -218,10 +391,11 @@ local function get_mode_name(mode_char)
   return mode_names[mode_char] or "Unknown Mode"
 end
 
--- Query all keymaps from Neovim's keymap state
+-- Query all keymaps from Neovim's keymap state and merge with built-in keybindings
 -- This function demonstrates how to use vim.api.nvim_get_keymap() and vim.api.nvim_buf_get_keymap()
--- to retrieve both global and buffer-local keymaps across all modes.
--- Returns: { [mode] = { {lhs, rhs, desc, buffer_local}, ... } }
+-- to retrieve both global and buffer-local keymaps across all modes, then merges with built-in
+-- commands parsed from doc/index.txt.
+-- Returns: { [mode] = { {lhs, rhs, desc, buffer_local, source}, ... } }
 local function get_all_keymaps()
   -- Define all modes we want to query
   -- These cover all possible contexts where keybindings can be defined
@@ -236,11 +410,14 @@ local function get_all_keymaps()
     -- Global keymaps are those registered with vim.keymap.set() or similar without buffer-specific options
     local global_maps = vim.api.nvim_get_keymap(mode)
     for _, map in ipairs(global_maps) do
+      local plugin_name = extract_plugin_name(map)
       table.insert(all_keymaps[mode], {
         lhs = map.lhs,
         rhs = map.rhs or "",
         desc = map.desc or "",
         buffer_local = false,
+        source = 'plugin',  -- Registered keymaps are from plugins or user config
+        plugin = plugin_name,
       })
     end
     
@@ -249,11 +426,32 @@ local function get_all_keymaps()
     -- Using 0 as the buffer number means "current buffer"
     local buffer_maps = vim.api.nvim_buf_get_keymap(0, mode)
     for _, map in ipairs(buffer_maps) do
+      local plugin_name = extract_plugin_name(map)
       table.insert(all_keymaps[mode], {
         lhs = map.lhs,
         rhs = map.rhs or "",
         desc = map.desc or "",
         buffer_local = true,
+        source = 'plugin',  -- Buffer-local registered keymaps
+        plugin = plugin_name,
+      })
+    end
+  end
+  
+  -- Parse and merge built-in keybindings from doc/index.txt
+  -- These are the core Neovim commands (dd, yy, gg, <C-w>h, etc.) that are NOT
+  -- exposed through vim.api.nvim_get_keymap() because they're handled internally
+  local builtin_keymaps = parse_builtin_keybindings()
+  
+  for mode, builtin_maps in pairs(builtin_keymaps) do
+    for _, builtin_map in ipairs(builtin_maps) do
+      table.insert(all_keymaps[mode], {
+        lhs = builtin_map.lhs,
+        rhs = "",  -- Built-in commands don't have an rhs (they're internal)
+        desc = builtin_map.desc,
+        buffer_local = false,
+        source = 'builtin',  -- Mark as built-in for visual indicators
+        plugin = "neovim",  -- Built-in commands are from Neovim core
       })
     end
   end
@@ -261,8 +459,9 @@ local function get_all_keymaps()
   return all_keymaps
 end
 
--- Filter out internal plugin mappings to reduce noise
+-- Filter out internal plugin mappings and command-line commands to reduce noise
 -- Many plugins use internal mappings (starting with <Plug>) that aren't meant for direct user invocation
+-- Command-line mode entries starting with ":" are commands, not keybindings
 -- We keep all other keymaps, including core Neovim bindings that may not have descriptions
 local function filter_keymaps(keymaps)
   local filtered = {}
@@ -274,11 +473,14 @@ local function filter_keymaps(keymaps)
       -- Filter logic:
       -- 1. Skip internal plugin mappings (those starting with <Plug>)
       --    These are used internally by plugins and not meant for direct user invocation
-      -- 2. Keep everything else, including core Neovim bindings without descriptions
+      -- 2. Skip command-line commands (entries starting with ":")
+      --    These are ex commands, not keybindings (e.g., ":help", ":quit")
+      -- 3. Keep everything else, including core Neovim bindings without descriptions
       --    Many useful keymaps (like <C-w>h for window navigation) don't have descriptions
       local is_plug_mapping = map.lhs:match("^<Plug>") ~= nil
+      local is_command = map.lhs:match("^:") ~= nil
       
-      if not is_plug_mapping then
+      if not is_plug_mapping and not is_command then
         table.insert(filtered[mode], map)
       end
     end
@@ -329,24 +531,48 @@ local function format_all_keybindings(keymaps)
   local leader = vim.g.mapleader or "\\"
   local leader_display = (leader == " ") and "<Space>" or leader
   
-  -- Count total keymaps for statistics
+  -- Get Neovim version for header
+  local nvim_version = vim.fn.has('nvim-0.9') == 1 and "0.9+" or 
+                       vim.fn.has('nvim-0.8') == 1 and "0.8+" or
+                       vim.fn.has('nvim-0.7') == 1 and "0.7+" or "Unknown"
+  
+  -- Count total keymaps and keymaps by source for statistics
   local total_count = 0
+  local builtin_count = 0
+  local plugin_count = 0
   for _, maps in pairs(keymaps) do
-    total_count = total_count + #maps
+    for _, map in ipairs(maps) do
+      total_count = total_count + 1
+      if map.source == 'builtin' then
+        builtin_count = builtin_count + 1
+      else
+        plugin_count = plugin_count + 1
+      end
+    end
   end
   
-  -- Add main header
+  -- Add comprehensive header
   table.insert(lines, "All Neovim Keybindings")
   table.insert(lines, "=======================")
   table.insert(lines, "")
-  table.insert(lines, string.format("Showing %d registered keybindings from plugins and user configuration.", total_count))
-  table.insert(lines, "Buffer-local keymaps are marked with [B].")
-  table.insert(lines, "Keymaps without descriptions are core Neovim or plugin-provided bindings.")
+  table.insert(lines, string.format("Showing %d total keybindings:", total_count))
+  table.insert(lines, string.format("  - %d built-in Neovim commands (from runtime doc/index.txt)", builtin_count))
+  table.insert(lines, string.format("  - %d registered keymaps (from plugins and user config)", plugin_count))
+  table.insert(lines, "")
+  table.insert(lines, "Source Indicators:")
+  table.insert(lines, "  [C] - Core Neovim built-in command (from internal command processor)")
+  table.insert(lines, "  [P] - Plugin or user-registered keymap (via vim.keymap.set())")
+  table.insert(lines, "  [B] - Buffer-local keymap (specific to current buffer)")
+  table.insert(lines, "")
+  table.insert(lines, string.format("Neovim Version: %s", nvim_version))
   table.insert(lines, string.format("Leader key: %s", leader_display))
   table.insert(lines, "")
-  table.insert(lines, "Note: Built-in Neovim commands (like <C-w>h/j/k/l, scrolling, etc.) are not shown")
-  table.insert(lines, "      because they're handled internally without explicit keymap registration.")
-  table.insert(lines, "      This tool shows explicitly registered keymaps from plugins and your config.")
+  table.insert(lines, "Understanding the Data Sources:")
+  table.insert(lines, "  - BUILT-IN COMMANDS are parsed from Neovim's runtime doc/index.txt help file")
+  table.insert(lines, "    These are core operations like 'dd', 'yy', 'gg', '<C-w>h' that are NOT exposed")
+  table.insert(lines, "    through vim.api.nvim_get_keymap() because they're handled internally.")
+  table.insert(lines, "  - REGISTERED KEYMAPS are queried via vim.api.nvim_get_keymap() and include")
+  table.insert(lines, "    keybindings from plugins (LSP, Telescope, etc.) and your user configuration.")
   table.insert(lines, "")
   
   -- Define the order of modes for display (most common first)
@@ -361,32 +587,48 @@ local function format_all_keybindings(keymaps)
       table.insert(lines, "")
       table.insert(lines, string.format("=== %s (%s) - %d keybindings ===", get_mode_name(mode), mode, #maps))
       table.insert(lines, "")
-      table.insert(lines, "Key                         Command/Action                                                   Description")
-      table.insert(lines, "---                         --------------                                                   -----------")
+      -- Column headers: Src + Key (28 chars) + Plugin (20 chars) + Command (44 chars) + Description
+      table.insert(lines, string.format("%-28s %-20s %-44s %s", "Key", "Plugin", "Command/Action", "Description"))
       
       -- Add each keybinding as a formatted row
       for _, map in ipairs(maps) do
         -- Convert key sequence to human-readable format (e.g., space -> <Space>)
         local readable_key = make_key_readable(map.lhs)
         
-        -- Truncate long commands to keep columns aligned
-        -- Increased from 40 to 60 characters for better visibility
-        local cmd = map.rhs
-        if #cmd > 60 then
-          cmd = string.sub(cmd, 1, 57) .. "..."
+        -- Get plugin name and truncate if needed
+        local plugin = map.plugin or ""
+        if #plugin > 20 then
+          plugin = string.sub(plugin, 1, 17) .. "..."
         end
         
-        -- Add [B] prefix for buffer-local keymaps
-        local prefix = map.buffer_local and "[B] " or "    "
+        -- Truncate long commands to keep columns aligned
+        local cmd = map.rhs
+        if #cmd > 44 then
+          cmd = string.sub(cmd, 1, 41) .. "..."
+        end
+        
+        -- Determine prefix based on source and buffer-local status
+        -- [C] = Core/built-in, [P] = Plugin/registered, [B] = Buffer-local
+        local prefix
+        if map.source == 'builtin' then
+          prefix = "[C]"
+        elseif map.buffer_local then
+          prefix = "[B]"
+        else
+          prefix = "[P]"
+        end
         
         -- Handle empty descriptions (many core Neovim keymaps don't have descriptions)
         local description = map.desc and map.desc ~= "" and map.desc or ""
         
+        -- Combine prefix and key into a single column (28 chars total: 4 for prefix + 24 for key)
+        local key_with_prefix = string.format("%s %s", prefix, readable_key)
+        
         -- Format as fixed-width columns for readability
-        -- Key: 24 chars (was 16), Command: 61 chars (was 41), Description: unlimited
-        local line = string.format("%s%-24s %-61s %s",
-          prefix,
-          readable_key,
+        -- Key (28 chars) + Plugin (20 chars) + Command (44 chars) + Description (unlimited)
+        local line = string.format("%-28s %-20s %-44s %s",
+          key_with_prefix,
+          plugin,
           cmd,
           description)
         table.insert(lines, line)

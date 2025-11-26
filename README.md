@@ -25,8 +25,9 @@ This is an **educational example** that illustrates fundamental concepts of Neov
 3. **Try the commands:**
    - Press `<leader>ph` to see the greeting
    - Press `<leader>pt` to toggle the plugin state
-   - Press `<leader>pk` to view all keybindings
-   - Or use `:NvimPluginHello`, `:NvimPluginToggle`, and `:NvimPluginKeybindings` directly
+   - Press `<leader>pk` to view plugin keybindings
+   - Press `<leader>pa` to view ALL Neovim keybindings (built-in + registered)
+   - Or use `:NvimPluginHello`, `:NvimPluginToggle`, `:NvimPluginKeybindings`, and `:NvimPluginAllKeybindings` directly
 
 ## Installation
 
@@ -194,12 +195,68 @@ Key             Command                   Description
 <leader>ph      :NvimPluginHello          Show plugin greeting
 <leader>pt      :NvimPluginToggle         Toggle plugin state
 <leader>pk      :NvimPluginKeybindings    Show plugin keybindings
+<leader>pa      :NvimPluginAllKeybindings Show all Neovim keybindings
 
 Note: <leader> is typically <Space> in LazyVim (or \ by default)
 ```
 
 **When keymaps are disabled:**
 If you've set `enable_keymaps = false`, the buffer will show a helpful message explaining that keymaps are disabled and list the available commands instead.
+
+### `:NvimPluginAllKeybindings`
+
+Opens a comprehensive keybindings viewer that displays ALL active Neovim keybindings from all sources, including built-in Neovim commands, plugin-registered keymaps, and user-defined keymaps. This command provides complete visibility into your Neovim keyboard configuration.
+
+**Usage:**
+```vim
+:NvimPluginAllKeybindings
+" Opens a buffer showing all keybindings grouped by mode with source indicators
+```
+
+**Features:**
+- **Built-in Commands**: Displays core Neovim commands (dd, yy, gg, <C-w>h, etc.) parsed from the runtime doc/index.txt help file
+- **Registered Keymaps**: Shows all keymaps from plugins and user config via vim.api.nvim_get_keymap()
+- **Source Indicators**:
+  - `[C]` - Core Neovim built-in command (from internal command processor)
+  - `[P]` - Plugin or user-registered keymap (via vim.keymap.set())
+  - `[B]` - Buffer-local keymap (specific to current buffer)
+- **Mode Grouping**: Keybindings are organized by mode (Normal, Insert, Visual, etc.)
+- **Searchable**: Use `/` to search within the buffer for specific keys or commands
+
+**Example output:**
+```
+All Neovim Keybindings
+=======================
+
+Showing 1500+ total keybindings:
+  - 1,264 built-in Neovim commands (from runtime doc/index.txt)
+  - 250+ registered keymaps (from plugins and user config)
+
+Source Indicators:
+  [C] - Core Neovim built-in command (from internal command processor)
+  [P] - Plugin or user-registered keymap (via vim.keymap.set())
+  [B] - Buffer-local keymap (specific to current buffer)
+
+=== Normal Mode (n) - 600+ keybindings ===
+
+Key                         Command/Action                                       Description
+---                         --------------                                       -----------
+[C] dd                                                                           delete N lines
+[C] gg                                                                           go to line N
+[C] <C-w>h                                                                       go to Nth left window
+[P] <Space>ff               <cmd>Telescope find_files<cr>                        Find files
+[B] gd                      vim.lsp.buf.definition                              Go to definition
+...
+```
+
+**Educational Value:**
+This command demonstrates:
+- The difference between built-in commands (handled internally) and registered keymaps (queryable via API)
+- How Neovim's built-in keybindings are documented in help files but not exposed through keymap APIs
+- Programmatic parsing of Neovim runtime documentation
+- Complete visibility into your keyboard configuration
+
+**Note:** Built-in keybindings are parsed from your Neovim installation's doc/index.txt file, so the list automatically matches your installed Neovim version.
 
 ## Keymaps
 
@@ -210,6 +267,7 @@ By default, the plugin registers the following keymaps in normal mode:
 | `<leader>ph` | `:NvimPluginHello` | Show plugin greeting |
 | `<leader>pt` | `:NvimPluginToggle` | Toggle plugin state |
 | `<leader>pk` | `:NvimPluginKeybindings` | Show plugin keybindings |
+| `<leader>pa` | `:NvimPluginAllKeybindings` | Show all Neovim keybindings |
 
 **Note on `<leader>`:**
 - The default leader key in Neovim is `\` (backslash)
