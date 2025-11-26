@@ -25,7 +25,8 @@ This is an **educational example** that illustrates fundamental concepts of Neov
 3. **Try the commands:**
    - Press `<leader>ph` to see the greeting
    - Press `<leader>pt` to toggle the plugin state
-   - Or use `:NvimPluginHello` and `:NvimPluginToggle` directly
+   - Press `<leader>pk` to view all keybindings
+   - Or use `:NvimPluginHello`, `:NvimPluginToggle`, and `:NvimPluginKeybindings` directly
 
 ## Installation
 
@@ -107,6 +108,7 @@ return {
   keys = {
     { "<leader>ph", "<cmd>NvimPluginHello<cr>", desc = "Show plugin greeting" },
     { "<leader>pt", "<cmd>NvimPluginToggle<cr>", desc = "Toggle plugin state" },
+    { "<leader>pk", "<cmd>NvimPluginKeybindings<cr>", desc = "Show plugin keybindings" },
   },
   opts = {
     -- Disable default keymaps since we defined custom ones above
@@ -172,6 +174,33 @@ Toggles the plugin's enabled/disabled state. This demonstrates stateful plugin b
 
 **The toggle persists during your Neovim session** but resets to enabled when you restart Neovim.
 
+### `:NvimPluginKeybindings`
+
+Opens a new buffer displaying all registered plugin keybindings in an easy-to-read format. This is helpful for discovering available shortcuts.
+
+**Usage:**
+```vim
+:NvimPluginKeybindings
+" Opens a buffer showing all plugin keymaps with their commands and descriptions
+```
+
+**Example output:**
+```
+nvim-plugin Keybindings
+=======================
+
+Key             Command                   Description
+---             -------                   -----------
+<leader>ph      :NvimPluginHello          Show plugin greeting
+<leader>pt      :NvimPluginToggle         Toggle plugin state
+<leader>pk      :NvimPluginKeybindings    Show plugin keybindings
+
+Note: <leader> is typically <Space> in LazyVim (or \ by default)
+```
+
+**When keymaps are disabled:**
+If you've set `enable_keymaps = false`, the buffer will show a helpful message explaining that keymaps are disabled and list the available commands instead.
+
 ## Keymaps
 
 By default, the plugin registers the following keymaps in normal mode:
@@ -180,6 +209,7 @@ By default, the plugin registers the following keymaps in normal mode:
 |-----|---------|-------------|
 | `<leader>ph` | `:NvimPluginHello` | Show plugin greeting |
 | `<leader>pt` | `:NvimPluginToggle` | Toggle plugin state |
+| `<leader>pk` | `:NvimPluginKeybindings` | Show plugin keybindings |
 
 **Note on `<leader>`:**
 - The default leader key in Neovim is `\` (backslash)
@@ -262,7 +292,7 @@ return {
     greeting = "Welcome to my custom plugin!",
   },
 }
--- Uses default keymaps: <leader>ph and <leader>pt
+-- Uses default keymaps: <leader>ph, <leader>pt, and <leader>pk
 ```
 
 #### Example 3: Disable default keymaps
@@ -313,6 +343,7 @@ return {
 5. **Test the keymaps** (if enabled):
    - Press `<Space>` + `p` + `h` for hello
    - Press `<Space>` + `p` + `t` for toggle
+   - Press `<Space>` + `p` + `k` for keybindings
 
 ### Using with Different Leader Keys
 
@@ -326,6 +357,7 @@ vim.g.mapleader = ","  -- Set leader to comma
 Then the keymaps become:
 - `,ph` for hello
 - `,pt` for toggle
+- `,pk` for keybindings
 
 ### Checking If Keymaps Are Registered
 
@@ -337,6 +369,9 @@ To see if the plugin's keymaps are active:
 
 :map <leader>pt
 " Should show: n  <Space>pt   *@<Lua function>   Toggle plugin state
+
+:map <leader>pk
+" Should show: n  <Space>pk   *@<Lua function>   Show plugin keybindings
 ```
 
 ### Using Commands from Lua Scripts
@@ -349,6 +384,9 @@ vim.cmd("NvimPluginHello")
 
 -- Call the toggle command
 vim.cmd("NvimPluginToggle")
+
+-- Call the keybindings command
+vim.cmd("NvimPluginKeybindings")
 
 -- Or use the API directly (not recommended, but possible)
 require("nvim-plugin").setup({ greeting = "Dynamic greeting!" })

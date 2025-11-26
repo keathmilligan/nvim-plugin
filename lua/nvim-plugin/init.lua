@@ -37,6 +37,18 @@ local state = {
 }
 
 -- ============================================================================
+-- Keybinding Tracking
+-- ============================================================================
+-- Store metadata about registered keybindings for display purposes.
+-- This table tracks our plugin's keymaps so we can show them to users.
+-- Note: If you add new keymaps, update this table to keep display in sync!
+local registered_keymaps = {
+  { key = "<leader>ph", command = "NvimPluginHello", desc = "Show plugin greeting" },
+  { key = "<leader>pt", command = "NvimPluginToggle", desc = "Toggle plugin state" },
+  { key = "<leader>pk", command = "NvimPluginKeybindings", desc = "Show plugin keybindings" },
+}
+
+-- ============================================================================
 -- Private Helper Functions
 -- ============================================================================
 -- These functions are local to this module and not exposed to users.
@@ -72,6 +84,116 @@ local function toggle_state()
   vim.notify(message, vim.log.levels.INFO)
 end
 
+-- Get keybindings metadata based on current configuration
+-- Returns an array of keybinding tables with key, command, and description
+local function get_keybindings()
+  -- If keymaps are disabled, return empty array
+  -- This demonstrates how plugin behavior adapts to configuration
+  if not state.config.enable_keymaps then
+    return {}
+  end
+  
+  -- Return a copy of the registered keymaps
+  -- We return all keymaps including the keybindings display command itself
+  return vim.deepcopy(registered_keymaps)
+end
+
+-- Format keybindings into human-readable text lines
+-- Takes an array of keybinding tables and returns an array of strings
+-- Demonstrates string formatting and data presentation in Lua
+local function format_keybindings(bindings)
+  local lines = {}
+  
+  -- Add header
+  table.insert(lines, "nvim-plugin Keybindings")
+  table.insert(lines, "=======================")
+  table.insert(lines, "")
+  
+  -- Check if there are any keybindings to display
+  if #bindings == 0 then
+    table.insert(lines, "Default keymaps are disabled.")
+    table.insert(lines, "")
+    table.insert(lines, "To enable them, configure the plugin with:")
+    table.insert(lines, '  require("nvim-plugin").setup({ enable_keymaps = true })')
+    table.insert(lines, "")
+    table.insert(lines, "Commands are still available:")
+    table.insert(lines, "  :NvimPluginHello")
+    table.insert(lines, "  :NvimPluginToggle")
+    table.insert(lines, "  :NvimPluginKeybindings")
+    return lines
+  end
+  
+  -- Add column headers
+  table.insert(lines, "Key             Command                   Description")
+  table.insert(lines, "---             -------                   -----------")
+  
+  -- Add each keybinding as a row
+  -- Use string.format() for aligned columns (demonstrates Lua string formatting)
+  for _, binding in ipairs(bindings) do
+    local line = string.format("%-15s %-25s %s",
+      binding.key,
+      ":" .. binding.command,
+      binding.desc)
+    table.insert(lines, line)
+  end
+  
+  -- Add helpful note about the leader key
+  table.insert(lines, "")
+  table.insert(lines, "Note: <leader> is typically <Space> in LazyVim (or \\ by default)")
+  
+  return lines
+end
+
+-- Display keybindings in a new buffer
+-- Creates a scratch buffer and fills it with formatted keybinding information
+-- Demonstrates buffer creation, configuration, and content manipulation
+local function show_keybindings()
+  -- Get keybinding data and format it
+  local bindings = get_keybindings()
+  local lines = format_keybindings(bindings)
+  
+  -- Create a new buffer with a unique name
+  -- The URI-style name "nvim-plugin://keybindings" follows Neovim conventions
+  local bufname = "nvim-plugin://keybindings"
+  
+  -- Check if a buffer with this name already exists
+  local existing_buf = vim.fn.bufnr(bufname)
+  local buf
+  
+  if existing_buf ~= -1 then
+    -- Reuse existing buffer
+    buf = existing_buf
+  else
+    -- Create a new buffer
+    -- vim.api.nvim_create_buf(listed, scratch)
+    -- - listed: false = don't show in buffer list
+    -- - scratch: true = temporary buffer, not saved to disk
+    buf = vim.api.nvim_create_buf(false, true)
+    
+    -- Set the buffer name
+    vim.api.nvim_buf_set_name(buf, bufname)
+  end
+  
+  -- Configure buffer options
+  -- These make the buffer read-only and suitable for display purposes
+  vim.bo[buf].buftype = "nofile"      -- Not associated with a file
+  vim.bo[buf].bufhidden = "wipe"      -- Delete buffer when hidden
+  vim.bo[buf].swapfile = false        -- No swap file needed
+  vim.bo[buf].modifiable = true       -- Temporarily allow modifications
+  
+  -- Set buffer content
+  -- vim.api.nvim_buf_set_lines(buffer, start, end, strict_indexing, lines)
+  -- Using 0, -1 replaces all content in the buffer
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  
+  -- Make buffer read-only after setting content
+  vim.bo[buf].modifiable = false
+  
+  -- Open the buffer in the current window
+  -- User can choose how to open it (split, vsplit, etc.) before running command
+  vim.api.nvim_set_current_buf(buf)
+end
+
 -- ============================================================================
 -- Command Registration
 -- ============================================================================
@@ -98,6 +220,13 @@ local function register_commands()
     toggle_state()
   end, {
     desc = "Toggle nvim-plugin enabled/disabled state",
+  })
+  
+  -- :NvimPluginKeybindings - Display all plugin keybindings in a buffer
+  vim.api.nvim_create_user_command("NvimPluginKeybindings", function()
+    show_keybindings()
+  end, {
+    desc = "Show all plugin keybindings in a new buffer",
   })
 end
 
@@ -131,6 +260,13 @@ local function register_keymaps()
     toggle_state()
   end, {
     desc = "Toggle plugin state",
+  })
+  
+  -- <leader>pk - Plugin Keybindings
+  vim.keymap.set("n", "<leader>pk", function()
+    show_keybindings()
+  end, {
+    desc = "Show plugin keybindings",
   })
 end
 
