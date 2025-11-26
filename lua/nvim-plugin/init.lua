@@ -46,6 +46,7 @@ local registered_keymaps = {
   { key = "<leader>ph", command = "NvimPluginHello", desc = "Show plugin greeting" },
   { key = "<leader>pt", command = "NvimPluginToggle", desc = "Toggle plugin state" },
   { key = "<leader>pk", command = "NvimPluginKeybindings", desc = "Show plugin keybindings" },
+  { key = "<leader>pa", command = "NvimPluginAllKeybindings", desc = "Show all Neovim keybindings" },
 }
 
 -- ============================================================================
@@ -195,6 +196,255 @@ local function show_keybindings()
 end
 
 -- ============================================================================
+-- Global Keybindings Viewer Helper Functions
+-- ============================================================================
+-- The following functions implement a comprehensive keybindings viewer that
+-- displays ALL keybindings from all sources (Neovim core, plugins, user config).
+-- This demonstrates how to query and display Neovim's keymap state programmatically.
+
+-- Map mode character to human-readable name
+-- Neovim uses single-character abbreviations for modes:
+-- n = normal, i = insert, v = visual, s = select, o = operator-pending, t = terminal, c = command-line
+local function get_mode_name(mode_char)
+  local mode_names = {
+    n = "Normal Mode",
+    i = "Insert Mode",
+    v = "Visual Mode",
+    s = "Select Mode",
+    o = "Operator-Pending Mode",
+    t = "Terminal Mode",
+    c = "Command-Line Mode",
+  }
+  return mode_names[mode_char] or "Unknown Mode"
+end
+
+-- Query all keymaps from Neovim's keymap state
+-- This function demonstrates how to use vim.api.nvim_get_keymap() and vim.api.nvim_buf_get_keymap()
+-- to retrieve both global and buffer-local keymaps across all modes.
+-- Returns: { [mode] = { {lhs, rhs, desc, buffer_local}, ... } }
+local function get_all_keymaps()
+  -- Define all modes we want to query
+  -- These cover all possible contexts where keybindings can be defined
+  local modes = { 'n', 'i', 'v', 's', 'o', 't', 'c' }
+  local all_keymaps = {}
+  
+  for _, mode in ipairs(modes) do
+    all_keymaps[mode] = {}
+    
+    -- Query global keymaps using vim.api.nvim_get_keymap(mode)
+    -- This returns an array of keymap tables with fields: lhs, rhs, desc, silent, noremap, etc.
+    -- Global keymaps are those registered with vim.keymap.set() or similar without buffer-specific options
+    local global_maps = vim.api.nvim_get_keymap(mode)
+    for _, map in ipairs(global_maps) do
+      table.insert(all_keymaps[mode], {
+        lhs = map.lhs,
+        rhs = map.rhs or "",
+        desc = map.desc or "",
+        buffer_local = false,
+      })
+    end
+    
+    -- Query buffer-local keymaps using vim.api.nvim_buf_get_keymap(buffer, mode)
+    -- Buffer-local keymaps are registered for specific buffers (e.g., LSP keymaps for code files)
+    -- Using 0 as the buffer number means "current buffer"
+    local buffer_maps = vim.api.nvim_buf_get_keymap(0, mode)
+    for _, map in ipairs(buffer_maps) do
+      table.insert(all_keymaps[mode], {
+        lhs = map.lhs,
+        rhs = map.rhs or "",
+        desc = map.desc or "",
+        buffer_local = true,
+      })
+    end
+  end
+  
+  return all_keymaps
+end
+
+-- Filter out internal plugin mappings to reduce noise
+-- Many plugins use internal mappings (starting with <Plug>) that aren't meant for direct user invocation
+-- We keep all other keymaps, including core Neovim bindings that may not have descriptions
+local function filter_keymaps(keymaps)
+  local filtered = {}
+  
+  for mode, maps in pairs(keymaps) do
+    filtered[mode] = {}
+    
+    for _, map in ipairs(maps) do
+      -- Filter logic:
+      -- 1. Skip internal plugin mappings (those starting with <Plug>)
+      --    These are used internally by plugins and not meant for direct user invocation
+      -- 2. Keep everything else, including core Neovim bindings without descriptions
+      --    Many useful keymaps (like <C-w>h for window navigation) don't have descriptions
+      local is_plug_mapping = map.lhs:match("^<Plug>") ~= nil
+      
+      if not is_plug_mapping then
+        table.insert(filtered[mode], map)
+      end
+    end
+  end
+  
+  return filtered
+end
+
+-- Make key sequences human-readable by converting invisible characters
+-- Neovim's vim.api.nvim_get_keymap() returns keymaps with <leader> already expanded
+-- to the literal key (e.g., a space character if leader is space). This function
+-- converts those literal characters back to visible representations like <Space>.
+local function make_key_readable(key_sequence)
+  -- vim.api.nvim_get_keymap() returns keys with <leader> already expanded to the actual character
+  -- For example, if leader is space, "<leader>ph" becomes " ph" (with a literal space)
+  -- We need to convert these literal characters to visible representations
+  
+  local readable = key_sequence
+  
+  -- Replace leading space character with <Space> for visibility
+  -- This is the most common case in LazyVim where leader is space
+  readable = readable:gsub("^ ", "<Space>")
+  
+  -- Also handle spaces in the middle of sequences (less common but possible)
+  -- Only replace if not already in <> notation
+  readable = readable:gsub("([^<]) ([^>])", "%1<Space>%2")
+  
+  -- Handle other special characters that might be hard to see
+  -- Tab character -> <Tab>
+  readable = readable:gsub("\t", "<Tab>")
+  
+  -- Handle other control characters if present
+  -- CR (carriage return) -> <CR>
+  readable = readable:gsub("\r", "<CR>")
+  
+  -- Handle escape if present (though it's usually already in <Esc> notation)
+  readable = readable:gsub("\27", "<Esc>")
+  
+  return readable
+end
+
+-- Format all keybindings into human-readable text lines grouped by mode
+-- This creates a nicely formatted display with mode sections and aligned columns
+local function format_all_keybindings(keymaps)
+  local lines = {}
+  
+  -- Get leader key for display in header
+  local leader = vim.g.mapleader or "\\"
+  local leader_display = (leader == " ") and "<Space>" or leader
+  
+  -- Count total keymaps for statistics
+  local total_count = 0
+  for _, maps in pairs(keymaps) do
+    total_count = total_count + #maps
+  end
+  
+  -- Add main header
+  table.insert(lines, "All Neovim Keybindings")
+  table.insert(lines, "=======================")
+  table.insert(lines, "")
+  table.insert(lines, string.format("Showing %d registered keybindings from plugins and user configuration.", total_count))
+  table.insert(lines, "Buffer-local keymaps are marked with [B].")
+  table.insert(lines, "Keymaps without descriptions are core Neovim or plugin-provided bindings.")
+  table.insert(lines, string.format("Leader key: %s", leader_display))
+  table.insert(lines, "")
+  table.insert(lines, "Note: Built-in Neovim commands (like <C-w>h/j/k/l, scrolling, etc.) are not shown")
+  table.insert(lines, "      because they're handled internally without explicit keymap registration.")
+  table.insert(lines, "      This tool shows explicitly registered keymaps from plugins and your config.")
+  table.insert(lines, "")
+  
+  -- Define the order of modes for display (most common first)
+  local mode_order = { 'n', 'i', 'v', 's', 'o', 't', 'c' }
+  
+  for _, mode in ipairs(mode_order) do
+    local maps = keymaps[mode]
+    
+    -- Skip empty modes to keep output clean
+    if maps and #maps > 0 then
+      -- Add mode section header with count
+      table.insert(lines, "")
+      table.insert(lines, string.format("=== %s (%s) - %d keybindings ===", get_mode_name(mode), mode, #maps))
+      table.insert(lines, "")
+      table.insert(lines, "Key                         Command/Action                                                   Description")
+      table.insert(lines, "---                         --------------                                                   -----------")
+      
+      -- Add each keybinding as a formatted row
+      for _, map in ipairs(maps) do
+        -- Convert key sequence to human-readable format (e.g., space -> <Space>)
+        local readable_key = make_key_readable(map.lhs)
+        
+        -- Truncate long commands to keep columns aligned
+        -- Increased from 40 to 60 characters for better visibility
+        local cmd = map.rhs
+        if #cmd > 60 then
+          cmd = string.sub(cmd, 1, 57) .. "..."
+        end
+        
+        -- Add [B] prefix for buffer-local keymaps
+        local prefix = map.buffer_local and "[B] " or "    "
+        
+        -- Handle empty descriptions (many core Neovim keymaps don't have descriptions)
+        local description = map.desc and map.desc ~= "" and map.desc or ""
+        
+        -- Format as fixed-width columns for readability
+        -- Key: 24 chars (was 16), Command: 61 chars (was 41), Description: unlimited
+        local line = string.format("%s%-24s %-61s %s",
+          prefix,
+          readable_key,
+          cmd,
+          description)
+        table.insert(lines, line)
+      end
+    end
+  end
+  
+  -- Add helpful footer
+  table.insert(lines, "")
+  table.insert(lines, "---")
+  table.insert(lines, "Tip: Use / to search within this buffer")
+  
+  return lines
+end
+
+-- Display all keybindings in a new buffer
+-- This is the main entry point that orchestrates querying, filtering, formatting, and displaying
+local function show_all_keybindings()
+  -- Query all keymaps from Neovim
+  local all_keymaps = get_all_keymaps()
+  
+  -- Filter out internal/unnamed mappings
+  local filtered_keymaps = filter_keymaps(all_keymaps)
+  
+  -- Format into display lines
+  local lines = format_all_keybindings(filtered_keymaps)
+  
+  -- Create a new buffer with a unique name
+  local bufname = "nvim-plugin://all-keybindings"
+  
+  -- Check if buffer already exists
+  local existing_buf = vim.fn.bufnr(bufname)
+  local buf
+  
+  if existing_buf ~= -1 then
+    buf = existing_buf
+  else
+    buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(buf, bufname)
+  end
+  
+  -- Configure buffer as scratch/read-only display buffer
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = true
+  
+  -- Set content
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  
+  -- Make read-only
+  vim.bo[buf].modifiable = false
+  
+  -- Display in current window
+  vim.api.nvim_set_current_buf(buf)
+end
+
+-- ============================================================================
 -- Command Registration
 -- ============================================================================
 -- Register user commands using the modern Neovim API.
@@ -227,6 +477,13 @@ local function register_commands()
     show_keybindings()
   end, {
     desc = "Show all plugin keybindings in a new buffer",
+  })
+  
+  -- :NvimPluginAllKeybindings - Display ALL keybindings from all sources in a buffer
+  vim.api.nvim_create_user_command("NvimPluginAllKeybindings", function()
+    show_all_keybindings()
+  end, {
+    desc = "Show all Neovim keybindings (core, plugins, user config) grouped by mode",
   })
 end
 
@@ -267,6 +524,13 @@ local function register_keymaps()
     show_keybindings()
   end, {
     desc = "Show plugin keybindings",
+  })
+  
+  -- <leader>pa - Plugin All keybindings (global viewer)
+  vim.keymap.set("n", "<leader>pa", function()
+    show_all_keybindings()
+  end, {
+    desc = "Show all Neovim keybindings",
   })
 end
 
