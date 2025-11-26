@@ -47,6 +47,7 @@ local registered_keymaps = {
   { key = "<leader>pt", command = "NvimPluginToggle", desc = "Toggle plugin state" },
   { key = "<leader>pk", command = "NvimPluginKeybindings", desc = "Show plugin keybindings" },
   { key = "<leader>pa", command = "NvimPluginAllKeybindings", desc = "Show all Neovim keybindings" },
+  { key = "<leader>pc", command = "NvimPluginAllCommands", desc = "Show all Neovim commands" },
 }
 
 -- ============================================================================
@@ -192,6 +193,290 @@ local function show_keybindings()
   
   -- Open the buffer in the current window
   -- User can choose how to open it (split, vsplit, etc.) before running command
+  vim.api.nvim_set_current_buf(buf)
+end
+
+-- ============================================================================
+-- Commands Viewer Helper Functions
+-- ============================================================================
+-- The following functions implement a comprehensive commands viewer that
+-- displays ALL ex-commands from all sources (Neovim core built-ins, plugins, user config).
+-- This demonstrates how to query and display Neovim's command state programmatically.
+--
+-- IMPORTANT: Built-in Ex-Commands Are NOT Exposed Through Command APIs
+-- ----------------------------------------------------------------------
+-- Neovim has two types of ex-commands:
+--
+-- 1. USER-DEFINED COMMANDS - Explicitly registered via nvim_create_user_command(), :command!,
+--    or equivalent in Vimscript. These are queryable via vim.api.nvim_get_commands().
+--    Examples: Plugin commands (:Telescope, :LSP*, etc.), user custom commands
+--
+-- 2. BUILT-IN EX-COMMANDS - Core Neovim functionality handled internally by the ex-command
+--    processor. These are NOT exposed through command APIs but ARE documented in help files.
+--    Examples: :help, :quit, :write, :substitute, :global, :lua, :terminal, :checkhealth
+--
+-- The vim.api.nvim_get_commands() and vim.api.nvim_buf_get_commands() APIs only return
+-- user-defined commands. This means Neovim's ~539 built-in ex-commands are invisible to
+-- those APIs. To show a complete picture, we parse Neovim's runtime doc/index.txt file,
+-- which comprehensively documents all built-in ex-commands.
+--
+-- This approach:
+-- - Uses the authoritative source (Neovim's own documentation)
+-- - Automatically matches the installed Neovim version
+-- - Avoids outdated or incorrect third-party documentation
+-- - Requires no manual maintenance when Neovim updates
+-- - Provides high educational value (demonstrates runtime documentation parsing)
+
+-- Cache for parsed built-in commands (parse once per session for performance)
+local builtin_commands_cache = nil
+
+-- Parse Neovim's runtime doc/index.txt to extract built-in ex-commands
+-- This is necessary because built-in commands like :help, :quit, :write, etc. are NOT
+-- exposed through vim.api.nvim_get_commands() - they're handled internally by the ex-command processor.
+-- The index.txt file contains comprehensive documentation of all ~539 built-in ex-commands.
+-- Returns: { {name, desc, source}, ... }
+local function parse_builtin_commands()
+  -- Check cache first
+  if builtin_commands_cache then
+    return builtin_commands_cache
+  end
+  
+  -- Initialize result structure
+  local builtin_commands = {}
+  
+  -- Locate the runtime index.txt file
+  -- This uses Neovim's runtime path to find the authoritative help documentation
+  local index_files = vim.api.nvim_get_runtime_file('doc/index.txt', false)
+  
+  if #index_files == 0 then
+    -- Fallback: index.txt not found (unusual but handle gracefully)
+    vim.notify("Warning: doc/index.txt not found. Built-in commands will not be shown.", vim.log.levels.WARN)
+    builtin_commands_cache = builtin_commands
+    return builtin_commands
+  end
+  
+  -- Read the index.txt file
+  local index_file = index_files[1]
+  local file = io.open(index_file, 'r')
+  
+  if not file then
+    vim.notify("Warning: Could not read " .. index_file, vim.log.levels.WARN)
+    builtin_commands_cache = builtin_commands
+    return builtin_commands
+  end
+  
+  local content = file:read('*all')
+  file:close()
+  
+  -- Parse the file line by line
+  -- Format: |:tag|\t\t:command[abbrev]\t\tdescription
+  -- Example: |:help|		:h[elp]		open a help window
+  -- Example: |:quit|		:q[uit]		quit current window
+  
+  for line in content:gmatch('[^\r\n]+') do
+    -- Match lines with the pattern: |:tag|\t\t:command[abbrev]\t\tdescription
+    -- The tag is the help tag, command is the actual ex-command syntax
+    -- Example: |:help|		:h[elp]		open a help window
+    local tag, cmd, desc = line:match('|(:[^|]+)|%s+([^%s]+)%s+(.+)')
+    
+    if tag and cmd and desc then
+      -- Only include commands that start with ':' (ex-commands)
+      if tag:match('^:') then
+        -- Add to the builtin commands list
+        table.insert(builtin_commands, {
+          name = cmd,
+          desc = desc,
+          source = 'builtin',  -- Mark as built-in for source tracking
+        })
+      end
+    end
+  end
+  
+  -- Cache the results for future calls
+  builtin_commands_cache = builtin_commands
+  
+  return builtin_commands
+end
+
+-- Query all user-defined commands and merge with built-in commands
+-- This function demonstrates how to use vim.api.nvim_get_commands() and
+-- vim.api.nvim_buf_get_commands() to retrieve user-defined commands, then
+-- merges them with built-in commands parsed from doc/index.txt.
+-- Returns: { {name, desc, attributes, source}, ... }
+local function get_all_commands()
+  local all_commands = {}
+  
+  -- Query global user-defined commands using vim.api.nvim_get_commands({})
+  -- This returns an object/table where keys are command names and values are metadata
+  -- Note: This only returns USER-DEFINED commands (created via :command or nvim_create_user_command)
+  -- It does NOT return built-in ex-commands like :help, :quit, :write, etc.
+  local global_commands = vim.api.nvim_get_commands({})
+  for name, cmd_info in pairs(global_commands) do
+    table.insert(all_commands, {
+      name = ':' .. name,
+      desc = cmd_info.definition or "",
+      attributes = cmd_info,
+      source = 'global',  -- Global user-defined command
+    })
+  end
+  
+  -- Query buffer-local user-defined commands using vim.api.nvim_buf_get_commands(0, {})
+  -- Buffer-local commands are registered for specific buffers (e.g., LSP keymaps for code files)
+  -- Using 0 as the buffer number means "current buffer"
+  local buffer_commands = vim.api.nvim_buf_get_commands(0, {})
+  for name, cmd_info in pairs(buffer_commands) do
+    table.insert(all_commands, {
+      name = ':' .. name,
+      desc = cmd_info.definition or "",
+      attributes = cmd_info,
+      source = 'buffer',  -- Buffer-local user-defined command
+    })
+  end
+  
+  -- Parse and merge built-in ex-commands from doc/index.txt
+  -- These are the core Neovim commands (:help, :quit, :write, etc.) that are NOT
+  -- exposed through vim.api.nvim_get_commands() because they're handled internally
+  local builtin_commands = parse_builtin_commands()
+  
+  for _, builtin_cmd in ipairs(builtin_commands) do
+    table.insert(all_commands, {
+      name = builtin_cmd.name,
+      desc = builtin_cmd.desc,
+      attributes = {},  -- Built-in commands don't have user-defined attributes
+      source = 'builtin',  -- Mark as built-in for visual indicators
+    })
+  end
+  
+  return all_commands
+end
+
+-- Format all commands into human-readable text lines
+-- This creates a nicely formatted display with source indicators and aligned columns
+local function format_all_commands(commands)
+  local lines = {}
+  
+  -- Get Neovim version for header
+  local nvim_version = vim.fn.has('nvim-0.11') == 1 and "0.11+" or
+                       vim.fn.has('nvim-0.10') == 1 and "0.10+" or
+                       vim.fn.has('nvim-0.9') == 1 and "0.9+" or
+                       vim.fn.has('nvim-0.8') == 1 and "0.8+" or "Unknown"
+  
+  -- Count commands by source for statistics
+  local total_count = #commands
+  local builtin_count = 0
+  local global_count = 0
+  local buffer_count = 0
+  for _, cmd in ipairs(commands) do
+    if cmd.source == 'builtin' then
+      builtin_count = builtin_count + 1
+    elseif cmd.source == 'global' then
+      global_count = global_count + 1
+    elseif cmd.source == 'buffer' then
+      buffer_count = buffer_count + 1
+    end
+  end
+  
+  -- Add comprehensive header
+  table.insert(lines, "All Neovim Commands")
+  table.insert(lines, "====================")
+  table.insert(lines, "")
+  table.insert(lines, string.format("Showing %d total commands:", total_count))
+  table.insert(lines, string.format("  - %d built-in core commands (from runtime doc/index.txt)", builtin_count))
+  table.insert(lines, string.format("  - %d global user-defined commands (from plugins and user config)", global_count))
+  table.insert(lines, string.format("  - %d buffer-local user-defined commands (specific to current buffer)", buffer_count))
+  table.insert(lines, "")
+  table.insert(lines, "Source Indicators:")
+  table.insert(lines, "  [C] - Core Neovim built-in command (from doc/index.txt)")
+  table.insert(lines, "  [G] - Global user-defined command (via nvim_create_user_command or :command)")
+  table.insert(lines, "  [B] - Buffer-local user-defined command (specific to current buffer)")
+  table.insert(lines, "")
+  table.insert(lines, string.format("Neovim Version: %s", nvim_version))
+  table.insert(lines, "")
+  table.insert(lines, "Understanding the Data Sources:")
+  table.insert(lines, "  - BUILT-IN COMMANDS are parsed from Neovim's runtime doc/index.txt help file")
+  table.insert(lines, "    These are core operations like ':help', ':quit', ':write' that are NOT exposed")
+  table.insert(lines, "    through vim.api.nvim_get_commands() because they're handled internally.")
+  table.insert(lines, "  - USER-DEFINED COMMANDS are queried via vim.api.nvim_get_commands() and include")
+  table.insert(lines, "    commands from plugins (:Telescope, :LSP*, etc.) and your user configuration.")
+  table.insert(lines, "")
+  table.insert(lines, "")
+  
+  -- Column headers
+  table.insert(lines, string.format("%-40s %s", "Command", "Description"))
+  table.insert(lines, "")
+  
+  -- Add each command as a formatted row
+  for _, cmd in ipairs(commands) do
+    -- Determine prefix based on source
+    -- [C] = Core/built-in, [G] = Global user-defined, [B] = Buffer-local user-defined
+    local prefix
+    if cmd.source == 'builtin' then
+      prefix = "[C]"
+    elseif cmd.source == 'buffer' then
+      prefix = "[B]"
+    else
+      prefix = "[G]"
+    end
+    
+    -- Combine prefix and command name
+    local cmd_with_prefix = string.format("%s %s", prefix, cmd.name)
+    
+    -- Truncate long commands and descriptions to keep display readable
+    if #cmd_with_prefix > 40 then
+      cmd_with_prefix = string.sub(cmd_with_prefix, 1, 37) .. "..."
+    end
+    
+    local description = cmd.desc and cmd.desc ~= "" and cmd.desc or ""
+    
+    -- Format as fixed-width columns for readability
+    local line = string.format("%-40s %s", cmd_with_prefix, description)
+    table.insert(lines, line)
+  end
+  
+  -- Add helpful footer
+  table.insert(lines, "")
+  table.insert(lines, "---")
+  table.insert(lines, "Tip: Use / to search within this buffer")
+  
+  return lines
+end
+
+-- Display all commands in a new buffer
+-- This is the main entry point that orchestrates querying, formatting, and displaying
+local function show_all_commands()
+  -- Query all commands from Neovim
+  local all_commands = get_all_commands()
+  
+  -- Format into display lines
+  local lines = format_all_commands(all_commands)
+  
+  -- Create a new buffer with a unique name
+  local bufname = "nvim-plugin://all-commands"
+  
+  -- Check if buffer already exists
+  local existing_buf = vim.fn.bufnr(bufname)
+  local buf
+  
+  if existing_buf ~= -1 then
+    buf = existing_buf
+  else
+    buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(buf, bufname)
+  end
+  
+  -- Configure buffer as scratch/read-only display buffer
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = true
+  
+  -- Set content
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  
+  -- Make read-only
+  vim.bo[buf].modifiable = false
+  
+  -- Display in current window
   vim.api.nvim_set_current_buf(buf)
 end
 
@@ -727,6 +1012,13 @@ local function register_commands()
   end, {
     desc = "Show all Neovim keybindings (core, plugins, user config) grouped by mode",
   })
+  
+  -- :NvimPluginAllCommands - Display ALL commands from all sources in a buffer
+  vim.api.nvim_create_user_command("NvimPluginAllCommands", function()
+    show_all_commands()
+  end, {
+    desc = "Show all Neovim commands (built-in, plugins, user config)",
+  })
 end
 
 -- ============================================================================
@@ -773,6 +1065,13 @@ local function register_keymaps()
     show_all_keybindings()
   end, {
     desc = "Show all Neovim keybindings",
+  })
+  
+  -- <leader>pc - Plugin Commands (all commands viewer)
+  vim.keymap.set("n", "<leader>pc", function()
+    show_all_commands()
+  end, {
+    desc = "Show all Neovim commands",
   })
 end
 
