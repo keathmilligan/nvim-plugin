@@ -10,6 +10,12 @@
 local M = {}
 
 -- ============================================================================
+-- Module Dependencies
+-- ============================================================================
+-- Require the sidebar module for sidebar functionality
+local sidebar = require("nvim-plugin.sidebar")
+
+-- ============================================================================
 -- Default Configuration
 -- ============================================================================
 -- Define sensible defaults that users can override via setup().
@@ -48,6 +54,7 @@ local registered_keymaps = {
   { key = "<leader>pk", command = "NvimPluginKeybindings", desc = "Show plugin keybindings" },
   { key = "<leader>pa", command = "NvimPluginAllKeybindings", desc = "Show all Neovim keybindings" },
   { key = "<leader>pc", command = "NvimPluginAllCommands", desc = "Show all Neovim commands" },
+  { key = "<leader>ps", command = "NvimPluginSidebar", desc = "Toggle plugin sidebar" },
 }
 
 -- ============================================================================
@@ -1019,6 +1026,27 @@ local function register_commands()
   end, {
     desc = "Show all Neovim commands (built-in, plugins, user config)",
   })
+  
+  -- :NvimPluginSidebar - Toggle the plugin sidebar
+  vim.api.nvim_create_user_command("NvimPluginSidebar", function()
+    sidebar.toggle()
+  end, {
+    desc = "Toggle nvim-plugin sidebar",
+  })
+  
+  -- :NvimPluginSidebarOpen - Explicitly open the sidebar
+  vim.api.nvim_create_user_command("NvimPluginSidebarOpen", function()
+    sidebar.open()
+  end, {
+    desc = "Open nvim-plugin sidebar",
+  })
+  
+  -- :NvimPluginSidebarClose - Explicitly close the sidebar
+  vim.api.nvim_create_user_command("NvimPluginSidebarClose", function()
+    sidebar.close()
+  end, {
+    desc = "Close nvim-plugin sidebar",
+  })
 end
 
 -- ============================================================================
@@ -1072,6 +1100,13 @@ local function register_keymaps()
     show_all_commands()
   end, {
     desc = "Show all Neovim commands",
+  })
+  
+  -- <leader>ps - Plugin Sidebar (toggle sidebar)
+  vim.keymap.set("n", "<leader>ps", function()
+    sidebar.toggle()
+  end, {
+    desc = "Toggle plugin sidebar",
   })
 end
 
