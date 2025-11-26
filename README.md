@@ -1,41 +1,41 @@
 # nvim-plugin
 
-A minimal example Neovim plugin demonstrating the basics of plugin development with modern APIs and LazyVim integration.
+A minimal example Neovim plugin demonstrating modern plugin development with LazyVim integration.
 
-## Purpose
+## Features
 
-This is an **educational example** that illustrates fundamental concepts of Neovim plugin development:
-- Basic plugin structure and organization (`lua/nvim-plugin/init.lua`)
-- Creating user commands with `vim.api.nvim_create_user_command()`
-- Registering keymaps with `vim.keymap.set()`
-- Providing a setup function for user configuration
-- Managing plugin state (stateful vs stateless behavior)
-- Integration with LazyVim plugin manager
-- Modern Neovim API usage (0.8+)
+- **Command Registration**: Shows how to create user commands with `vim.api.nvim_create_user_command()`
+- **Keymap Registration**: Demonstrates `vim.keymap.set()` with configurable keybindings
+- **State Management**: Example of maintaining plugin state during runtime
+- **Keybindings Viewer**: Display plugin-specific keybindings and ALL Neovim keybindings (built-in + registered)
+- **Commands Viewer**: Display ALL Neovim commands (built-in core commands + user-defined commands)
+- **Documentation Parsing**: Demonstrates programmatic parsing of Neovim's runtime help files
 
 ## Requirements
 
-- Neovim 0.8 or higher
-- LazyVim (or similar lazy-loading plugin manager)
+- Neovim 0.8+
+- LazyVim (or similar plugin manager)
 
 ## Quick Start
 
-1. **Install the plugin** by adding to your LazyVim config
-2. **Restart Neovim** or run `:Lazy reload nvim-plugin`
-3. **Try the commands:**
-   - Press `<leader>ph` to see the greeting
-   - Press `<leader>pt` to toggle the plugin state
-   - Press `<leader>pk` to view plugin keybindings
-   - Press `<leader>pa` to view ALL Neovim keybindings (built-in + registered)
-   - Or use `:NvimPluginHello`, `:NvimPluginToggle`, `:NvimPluginKeybindings`, and `:NvimPluginAllKeybindings` directly
+Add to your LazyVim config:
+```lua
+return {
+  "yourusername/nvim-plugin",
+  opts = {},
+}
+```
+
+Try the default keymaps:
+- `<leader>ph` - Show greeting
+- `<leader>pt` - Toggle plugin state
+- `<leader>pk` - View plugin keybindings
+- `<leader>pa` - View ALL Neovim keybindings (built-in + registered)
+- `<leader>pc` - View ALL Neovim commands (built-in + user-defined)
 
 ## Installation
 
-> **Note**: All examples use the `opts = {}` pattern, which is the idiomatic LazyVim way. When you use `opts`, LazyVim automatically calls `require("nvim-plugin").setup(opts)` for you - no need for a manual `config = function()` block!
-
-### LazyVim (Standard Installation - Simplest)
-
-Create a new file in your LazyVim plugins directory (e.g., `~/.config/nvim/lua/plugins/nvim-plugin.lua`):
+Create `~/.config/nvim/lua/plugins/nvim-plugin.lua`:
 
 ```lua
 return {
@@ -44,786 +44,154 @@ return {
 }
 ```
 
-That's it! LazyVim automatically calls `require("nvim-plugin").setup(opts)` for you.
+### Custom Configuration
 
-**With custom options:**
 ```lua
 return {
   "yourusername/nvim-plugin",
   opts = {
-    greeting = "Hello from nvim-plugin!",
-    enable_keymaps = true,
+    greeting = "Custom greeting!",
+    enable_keymaps = true,  -- Set to false to disable default keymaps
   },
-}
-```
-
-### Alternative: Explicit Config Function
-
-If you need more control, you can use the explicit config function (but this is usually unnecessary):
-
-```lua
-return {
-  "yourusername/nvim-plugin",
-  config = function()
-    require("nvim-plugin").setup({
-      greeting = "Custom greeting!",
-    })
-  end,
 }
 ```
 
 ### Local Development
 
-To test the plugin locally before publishing:
-
 ```lua
 return {
-  dir = "/path/to/nvim-plugin",  -- Use absolute path to local directory
+  dir = "/absolute/path/to/nvim-plugin",
   opts = {},
 }
 ```
 
-**Windows example:**
-```lua
-return {
-  dir = "C:/Users/yourname/projects/nvim-plugin",  -- Use forward slashes
-  opts = {},
-}
-```
-
-**Linux/macOS example:**
-```lua
-return {
-  dir = "/home/yourname/projects/nvim-plugin",
-  opts = {},
-}
-```
-
-### Lazy-loading with Custom Keys
-
-For better startup performance, configure lazy-loading with custom keymaps:
-
-```lua
-return {
-  "yourusername/nvim-plugin",
-  keys = {
-    { "<leader>ph", "<cmd>NvimPluginHello<cr>", desc = "Show plugin greeting" },
-    { "<leader>pt", "<cmd>NvimPluginToggle<cr>", desc = "Toggle plugin state" },
-    { "<leader>pk", "<cmd>NvimPluginKeybindings<cr>", desc = "Show plugin keybindings" },
-  },
-  opts = {
-    -- Disable default keymaps since we defined custom ones above
-    enable_keymaps = false,
-  },
-}
-```
-
-### Alternative Keys Configuration
-
-If you prefer different keymaps:
+### Custom Keymaps
 
 ```lua
 return {
   "yourusername/nvim-plugin",
   keys = {
     { "<leader>h", "<cmd>NvimPluginHello<cr>", desc = "Plugin greeting" },
-    { "<leader>x", "<cmd>NvimPluginToggle<cr>", desc = "Toggle plugin" },
+    { "<leader>t", "<cmd>NvimPluginToggle<cr>", desc = "Toggle plugin" },
   },
   opts = {
-    greeting = "Hi there!",
-    enable_keymaps = false,  -- Don't use default <leader>ph and <leader>pt
+    enable_keymaps = false,  -- Disable defaults
   },
 }
 ```
 
 ## Commands
 
-After installation, the plugin provides the following user commands:
+| Command | Description |
+|---------|-------------|
+| `:NvimPluginHello` | Display the configured greeting message |
+| `:NvimPluginToggle` | Toggle plugin enabled/disabled state (session-only) |
+| `:NvimPluginKeybindings` | Open buffer showing plugin keybindings |
+| `:NvimPluginAllKeybindings` | Open buffer showing ALL Neovim keybindings |
+| `:NvimPluginAllCommands` | Open buffer showing ALL Neovim commands |
 
-### `:NvimPluginHello`
+### Keybindings Viewer (`:NvimPluginAllKeybindings`)
 
-Displays the configured greeting message using `vim.notify()`.
+Displays comprehensive keybinding information from all sources:
+- **Built-in Commands**: Parses Neovim's `doc/index.txt` (~1,264 core commands like dd, yy, gg, `<C-w>h`)
+- **Registered Keymaps**: Queries `vim.api.nvim_get_keymap()` for plugin and user-defined keymaps
+- **Source Indicators**: `[C]` Core built-in, `[P]` Plugin/User registered, `[B]` Buffer-local
+- **Mode Grouping**: Organized by mode (Normal, Insert, Visual, etc.)
+- **Plugin Detection**: Identifies which plugin registered each keymap
+- **Searchable**: Use `/` to find specific keys or commands
 
-**Usage:**
-```vim
-:NvimPluginHello
-" Shows: "Hello from nvim-plugin!" (or your custom greeting)
-```
+### Commands Viewer (`:NvimPluginAllCommands`)
 
-**In Lua:**
-```lua
-vim.cmd("NvimPluginHello")
-```
+Displays comprehensive command information from all sources:
+- **Built-in Commands**: Parses Neovim's `doc/index.txt` (~539 core ex-commands like `:help`, `:quit`, `:write`)
+- **User-defined Commands**: Queries `vim.api.nvim_get_commands()` for global plugin and user commands
+- **Buffer-local Commands**: Queries `vim.api.nvim_buf_get_commands()` for buffer-specific commands
+- **Source Indicators**: `[C]` Core built-in, `[G]` Global user-defined, `[B]` Buffer-local
+- **Searchable**: Use `/` to find specific commands
 
-**Customizing the greeting:**
-```lua
-require("nvim-plugin").setup({
-  greeting = "Welcome! This is my custom greeting message."
-})
-```
-
-### `:NvimPluginToggle`
-
-Toggles the plugin's enabled/disabled state. This demonstrates stateful plugin behavior and provides user feedback.
-
-**Usage:**
-```vim
-:NvimPluginToggle
-" First call shows: "nvim-plugin disabled"
-" Second call shows: "nvim-plugin enabled"
-```
-
-**The toggle persists during your Neovim session** but resets to enabled when you restart Neovim.
-
-### `:NvimPluginKeybindings`
-
-Opens a new buffer displaying all registered plugin keybindings in an easy-to-read format. This is helpful for discovering available shortcuts.
-
-**Usage:**
-```vim
-:NvimPluginKeybindings
-" Opens a buffer showing all plugin keymaps with their commands and descriptions
-```
-
-**Example output:**
-```
-nvim-plugin Keybindings
-=======================
-
-Key             Command                   Description
----             -------                   -----------
-<leader>ph      :NvimPluginHello          Show plugin greeting
-<leader>pt      :NvimPluginToggle         Toggle plugin state
-<leader>pk      :NvimPluginKeybindings    Show plugin keybindings
-<leader>pa      :NvimPluginAllKeybindings Show all Neovim keybindings
-
-Note: <leader> is typically <Space> in LazyVim (or \ by default)
-```
-
-**When keymaps are disabled:**
-If you've set `enable_keymaps = false`, the buffer will show a helpful message explaining that keymaps are disabled and list the available commands instead.
-
-### `:NvimPluginAllKeybindings`
-
-Opens a comprehensive keybindings viewer that displays ALL active Neovim keybindings from all sources, including built-in Neovim commands, plugin-registered keymaps, and user-defined keymaps. This command provides complete visibility into your Neovim keyboard configuration.
-
-**Usage:**
-```vim
-:NvimPluginAllKeybindings
-" Opens a buffer showing all keybindings grouped by mode with source indicators
-```
-
-**Features:**
-- **Built-in Commands**: Displays core Neovim commands (dd, yy, gg, <C-w>h, etc.) parsed from the runtime doc/index.txt help file
-- **Registered Keymaps**: Shows all keymaps from plugins and user config via vim.api.nvim_get_keymap()
-- **Source Indicators**:
-  - `[C]` - Core Neovim built-in command (from internal command processor)
-  - `[P]` - Plugin or user-registered keymap (via vim.keymap.set())
-  - `[B]` - Buffer-local keymap (specific to current buffer)
-- **Mode Grouping**: Keybindings are organized by mode (Normal, Insert, Visual, etc.)
-- **Searchable**: Use `/` to search within the buffer for specific keys or commands
-
-**Example output:**
-```
-All Neovim Keybindings
-=======================
-
-Showing 1500+ total keybindings:
-  - 1,264 built-in Neovim commands (from runtime doc/index.txt)
-  - 250+ registered keymaps (from plugins and user config)
-
-Source Indicators:
-  [C] - Core Neovim built-in command (from internal command processor)
-  [P] - Plugin or user-registered keymap (via vim.keymap.set())
-  [B] - Buffer-local keymap (specific to current buffer)
-
-=== Normal Mode (n) - 600+ keybindings ===
-
-Key                         Command/Action                                       Description
----                         --------------                                       -----------
-[C] dd                                                                           delete N lines
-[C] gg                                                                           go to line N
-[C] <C-w>h                                                                       go to Nth left window
-[P] <Space>ff               <cmd>Telescope find_files<cr>                        Find files
-[B] gd                      vim.lsp.buf.definition                              Go to definition
-...
-```
-
-**Educational Value:**
-This command demonstrates:
-- The difference between built-in commands (handled internally) and registered keymaps (queryable via API)
-- How Neovim's built-in keybindings are documented in help files but not exposed through keymap APIs
-- Programmatic parsing of Neovim runtime documentation
-- Complete visibility into your keyboard configuration
-
-**Note:** Built-in keybindings are parsed from your Neovim installation's doc/index.txt file, so the list automatically matches your installed Neovim version.
-
-## Keymaps
-
-By default, the plugin registers the following keymaps in normal mode:
+## Default Keymaps
 
 | Key | Command | Description |
 |-----|---------|-------------|
-| `<leader>ph` | `:NvimPluginHello` | Show plugin greeting |
-| `<leader>pt` | `:NvimPluginToggle` | Toggle plugin state |
+| `<leader>ph` | `:NvimPluginHello` | Show greeting |
+| `<leader>pt` | `:NvimPluginToggle` | Toggle state |
 | `<leader>pk` | `:NvimPluginKeybindings` | Show plugin keybindings |
-| `<leader>pa` | `:NvimPluginAllKeybindings` | Show all Neovim keybindings |
+| `<leader>pa` | `:NvimPluginAllKeybindings` | Show all keybindings |
+| `<leader>pc` | `:NvimPluginAllCommands` | Show all commands |
 
-**Note on `<leader>`:**
-- The default leader key in Neovim is `\` (backslash)
-- Most users (and LazyVim) remap it to `<Space>`
-- So `<leader>ph` typically means: press `Space`, then `p`, then `h`
+**Note**: `<leader>` is typically `<Space>` in LazyVim (default is `\`)
 
-### Disabling Default Keymaps
+## Configuration Options
 
-You can disable default keymaps and define your own in the plugin spec:
-
-```lua
-return {
-  "yourusername/nvim-plugin",
-  keys = {
-    -- Define your own custom keys
-    { "<C-h>", "<cmd>NvimPluginHello<cr>", desc = "Show greeting" },
-    { "<C-t>", "<cmd>NvimPluginToggle<cr>", desc = "Toggle plugin" },
-  },
-  opts = {
-    enable_keymaps = false,  -- Disables default <leader>ph and <leader>pt
-  },
-}
-```
-
-Or disable keymaps entirely and define them elsewhere:
-
-```lua
--- In your plugin spec
-return {
-  "yourusername/nvim-plugin",
-  opts = {
-    enable_keymaps = false,
-  },
-}
-
--- Then in your keymaps config (e.g., ~/.config/nvim/lua/config/keymaps.lua)
-vim.keymap.set("n", "<C-h>", "<cmd>NvimPluginHello<cr>", { desc = "Show greeting" })
-vim.keymap.set("n", "<C-t>", "<cmd>NvimPluginToggle<cr>", { desc = "Toggle plugin" })
-```
-
-## Configuration
-
-The plugin supports the following configuration options:
-
-```lua
--- In your LazyVim plugin spec (~/.config/nvim/lua/plugins/nvim-plugin.lua)
-return {
-  "yourusername/nvim-plugin",
-  opts = {
-    -- Customize the greeting message shown by :NvimPluginHello
-    -- Type: string
-    -- Default: "Hello from nvim-plugin!"
-    greeting = "Hello from nvim-plugin!",
-    
-    -- Enable or disable default keymaps (<leader>ph and <leader>pt)
-    -- Type: boolean
-    -- Default: true
-    enable_keymaps = true,
-  },
-}
-```
-
-### Configuration Examples
-
-#### Example 1: Use all defaults (simplest)
-```lua
-return {
-  "yourusername/nvim-plugin",
-  opts = {},
-}
--- greeting: "Hello from nvim-plugin!"
--- enable_keymaps: true
-```
-
-#### Example 2: Custom greeting only
 ```lua
 return {
   "yourusername/nvim-plugin",
   opts = {
-    greeting = "Welcome to my custom plugin!",
+    greeting = "Hello from nvim-plugin!",  -- Custom greeting message
+    enable_keymaps = true,                  -- Enable/disable default keymaps
   },
 }
--- Uses default keymaps: <leader>ph, <leader>pt, and <leader>pk
 ```
 
-#### Example 3: Disable default keymaps
-```lua
-return {
-  "yourusername/nvim-plugin",
-  opts = {
-    enable_keymaps = false,
-  },
-}
--- Commands still work, but no default keymaps
--- Define your own keymaps as needed
-```
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `greeting` | string | `"Hello from nvim-plugin!"` | Message shown by `:NvimPluginHello` |
+| `enable_keymaps` | boolean | `true` | Enable default `<leader>p*` keymaps |
 
-#### Example 4: Full customization
-```lua
-return {
-  "yourusername/nvim-plugin",
-  opts = {
-    greeting = "Hi there! Plugin is ready.",
-    enable_keymaps = false,
-  },
-}
--- Then define custom keymaps in the keys section if desired
-```
+## Usage
 
-## Usage Guide
-
-### Getting Started
-
-1. **Install the plugin** using one of the installation methods above
-2. **Restart Neovim** or reload the plugin:
-   ```vim
-   :Lazy reload nvim-plugin
-   ```
-3. **Test the greeting command:**
-   ```vim
-   :NvimPluginHello
-   ```
-   You should see a notification with "Hello from nvim-plugin!"
-
-4. **Test the toggle command:**
-   ```vim
-   :NvimPluginToggle
-   ```
-   You should see "nvim-plugin disabled", then "enabled" on the second call
-
-5. **Test the keymaps** (if enabled):
-   - Press `<Space>` + `p` + `h` for hello
-   - Press `<Space>` + `p` + `t` for toggle
-   - Press `<Space>` + `p` + `k` for keybindings
-
-### Using with Different Leader Keys
-
-If you've remapped your leader key to something other than space:
-
-```lua
--- In your init.lua or config
-vim.g.mapleader = ","  -- Set leader to comma
-```
-
-Then the keymaps become:
-- `,ph` for hello
-- `,pt` for toggle
-- `,pk` for keybindings
-
-### Checking If Keymaps Are Registered
-
-To see if the plugin's keymaps are active:
-
-```vim
-:map <leader>ph
-" Should show: n  <Space>ph   *@<Lua function>   Show plugin greeting
-
-:map <leader>pt
-" Should show: n  <Space>pt   *@<Lua function>   Toggle plugin state
-
-:map <leader>pk
-" Should show: n  <Space>pk   *@<Lua function>   Show plugin keybindings
-```
-
-### Using Commands from Lua Scripts
-
-You can call the commands from Lua code:
-
-```lua
--- Call the hello command
-vim.cmd("NvimPluginHello")
-
--- Call the toggle command
-vim.cmd("NvimPluginToggle")
-
--- Call the keybindings command
-vim.cmd("NvimPluginKeybindings")
-
--- Or use the API directly (not recommended, but possible)
-require("nvim-plugin").setup({ greeting = "Dynamic greeting!" })
-```
-
-### Creating Your Own Wrapper Functions
-
-You can create your own functions that use the plugin:
-
-```lua
--- In your Neovim config
-local function greet_and_toggle()
-  vim.cmd("NvimPluginHello")
-  vim.wait(1000)  -- Wait 1 second
-  vim.cmd("NvimPluginToggle")
-end
-
--- Create a keymap for your custom function
-vim.keymap.set("n", "<leader>gt", greet_and_toggle, { desc = "Greet and toggle" })
-```
+After installation, reload with `:Lazy reload nvim-plugin` and try:
+- `:NvimPluginHello` or `<leader>ph` - Show greeting
+- `:NvimPluginToggle` or `<leader>pt` - Toggle state
+- `:NvimPluginKeybindings` or `<leader>pk` - Show plugin keybindings
+- `:NvimPluginAllKeybindings` or `<leader>pa` - Show all keybindings
+- `:NvimPluginAllCommands` or `<leader>pc` - Show all commands
 
 ## Troubleshooting
 
-### Plugin commands not available
-
-**Problem**: `:NvimPluginHello` shows "Not an editor command"
-
-**Solutions:**
-1. **Ensure plugin is configured:**
-   - Check your LazyVim plugin spec has `opts = {}` (LazyVim automatically calls setup)
-   - Or verify you have a `config = function()` that calls `require("nvim-plugin").setup()`
-   
-2. **Reload the plugin:**
-   ```vim
-   :Lazy reload nvim-plugin
-   ```
-   
-3. **Check if plugin is loaded:**
-   ```vim
-   :Lazy
-   ```
-   Find `nvim-plugin` in the list - it should not show as "not loaded"
-
-4. **Verify the plugin directory:**
-   - If using local development, ensure the `dir` path is correct and absolute
-   - Check that `lua/nvim-plugin/init.lua` exists in that directory
-
-5. **Check for Lua errors:**
-   ```vim
-   :messages
-   ```
-   Look for any error messages about the plugin
+### Commands not available
+- Run `:Lazy reload nvim-plugin`
+- Verify `opts = {}` is in your plugin spec
+- Check `:messages` for errors
+- Ensure `lua/nvim-plugin/init.lua` exists
 
 ### Keymaps not working
+- Verify leader key: `:echo mapleader`
+- Check registration: `:map <leader>ph`
+- Ensure `enable_keymaps` is not `false`
+- Try command directly: `:NvimPluginHello`
 
-**Problem**: `<leader>ph` doesn't do anything
-
-**Solutions:**
-1. **Verify leader key:**
-   ```vim
-   :echo mapleader
-   ```
-   Should show a space (if using LazyVim default)
-
-2. **Check if keymaps are enabled:**
-   - Ensure `enable_keymaps` is not set to `false` in your config
-   - Default is `true`, so if not specified, they should be enabled
-
-3. **Check if keymap is registered:**
-   ```vim
-   :map <leader>ph
-   ```
-   Should show the mapping. If not, keymaps aren't being registered.
-
-4. **Look for conflicts:**
-   ```vim
-   :verbose map <leader>ph
-   ```
-   Shows which plugin/config file set this keymap last
-
-5. **Try the command directly:**
-   ```vim
-   :NvimPluginHello
-   ```
-   If this works but the keymap doesn't, it's a keymap registration issue
-
-### Custom greeting not showing
-
-**Problem**: Still seeing default greeting after configuration
-
-**Solutions:**
-1. **Verify syntax in your plugin spec:**
-   ```lua
-   return {
-     "yourusername/nvim-plugin",
-     opts = {
-       greeting = "Custom message",  -- Correct
-     },
-   }
-   ```
-   Not:
-   ```lua
-   return {
-     "yourusername/nvim-plugin",
-     opts = {
-       message = "Custom",  -- Wrong - should be "greeting"
-     },
-   }
-   ```
-
-2. **Restart Neovim:**
-   - Changes to plugin configs often require a restart
-   - Or use `:Lazy reload nvim-plugin`
-
-3. **Check for typos:**
-   - Option is `greeting` not `message` or `greetings`
-   - Lua is case-sensitive
-
-4. **Verify the config is being applied:**
-   ```lua
-   -- In your plugin spec, temporarily add:
-   return {
-     "yourusername/nvim-plugin",
-     opts = {
-       greeting = "Test message",
-     },
-     config = function(_, opts)
-       print("Plugin setup called with:", vim.inspect(opts))
-       require("nvim-plugin").setup(opts)
-     end,
-   }
-   ```
-
-### LazyVim lazy-loading issues
-
-**Problem**: Plugin loads immediately instead of lazy-loading
-
-**Solutions:**
-1. **Use `keys` specification:**
-   ```lua
-   return {
-     "yourusername/nvim-plugin",
-     keys = {
-       { "<leader>ph", "<cmd>NvimPluginHello<cr>", desc = "Show greeting" },
-     },
-     opts = {},
-   }
-   ```
-
-2. **Don't use `lazy = false`:**
-   ```lua
-   return {
-     "yourusername/nvim-plugin",
-     lazy = false,  -- Remove this line for lazy-loading
-     opts = {},
-   }
-   ```
-
-3. **Check Lazy.nvim status:**
-   ```vim
-   :Lazy
-   ```
-   Look at when the plugin loaded (should be "on keys" if configured properly)
-
-### Neovim version compatibility
-
-**Problem**: Errors about unknown functions like `vim.keymap.set`
-
-**Solutions:**
-1. **Check your Neovim version:**
-   ```vim
-   :version
-   ```
-   Or from terminal:
-   ```bash
-   nvim --version
-   ```
-
-2. **This plugin requires Neovim 0.8+:**
-   - `vim.keymap.set()` was added in Neovim 0.7
-   - `vim.notify()` default behavior improved in 0.8
-   - Upgrade if you're on an older version
-
-3. **Upgrade Neovim:**
-   - **Ubuntu/Debian:** Use the official PPA or AppImage
-   - **macOS:** `brew upgrade neovim`
-   - **Windows:** Download from [GitHub releases](https://github.com/neovim/neovim/releases)
-
-### Plugin not found when using `dir`
-
-**Problem**: Using local `dir` but plugin won't load
-
-**Solutions:**
-1. **Use absolute paths:**
-   ```lua
-   dir = "/home/user/projects/nvim-plugin",  -- Good (Linux/macOS)
-   dir = "C:/Users/user/nvim-plugin",        -- Good (Windows, forward slashes)
-   dir = "~/projects/nvim-plugin",           -- May not work - use full path
-   ```
-
-2. **Verify the path exists:**
-   ```bash
-   ls /path/to/nvim-plugin/lua/nvim-plugin/init.lua
-   ```
-   Should exist and be readable
-
-3. **Check directory structure:**
-   ```
-   nvim-plugin/
-   └── lua/
-       └── nvim-plugin/
-           └── init.lua
-   ```
+### Custom config not applied
+- Restart Neovim or `:Lazy reload nvim-plugin`
+- Check option spelling: `greeting` (not `message`)
+- Use absolute paths for `dir` in local development
 
 ## Development
 
-This is a minimal example project designed for learning. To use it as a reference:
+This is an educational example demonstrating plugin fundamentals.
 
-### Setup for Learning
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/nvim-plugin.git
-   cd nvim-plugin
-   ```
-
-2. **Examine the code structure:**
-   ```
-   nvim-plugin/
-   ├── lua/
-   │   └── nvim-plugin/
-   │       └── init.lua      # Main plugin implementation (read this!)
-   ├── README.md             # This file
-   └── AGENTS.md             # Development guidelines
-   ```
-
-3. **Read `lua/nvim-plugin/init.lua`:**
-   - Contains extensive inline comments
-   - Explains the module pattern
-   - Shows modern API usage with rationale
-   - Demonstrates configuration handling
-   - Includes state management example
-
-4. **Test locally in Neovim:**
-   - Add the plugin to your LazyVim config using `dir` (see Installation)
-   - Make changes to `init.lua`
-   - Reload with `:Lazy reload nvim-plugin`
-   - Test your changes
-
-### Experimentation Ideas
-
-1. **Add a new command:**
-   ```lua
-   -- In init.lua, in the register_commands() function
-   vim.api.nvim_create_user_command("NvimPluginInfo", function()
-     vim.notify("nvim-plugin v1.0 - An example plugin", vim.log.levels.INFO)
-   end, {
-     desc = "Show plugin information",
-   })
-   ```
-
-2. **Add a configuration option:**
-   ```lua
-   -- In default_config
-   local default_config = {
-     greeting = "Hello from nvim-plugin!",
-     enable_keymaps = true,
-     show_version = false,  -- New option
-   }
-   ```
-
-3. **Create a multi-file structure:**
-   ```
-   lua/nvim-plugin/
-   ├── init.lua          # Main entry point
-   ├── config.lua        # Configuration handling
-   ├── commands.lua      # Command definitions
-   └── keymaps.lua       # Keymap registration
-   ```
-
-4. **Add Telescope integration:**
-   ```lua
-   -- Example: Create a Telescope picker
-   vim.api.nvim_create_user_command("NvimPluginPick", function()
-     require("telescope.builtin").find_files({
-       prompt_title = "Plugin Files",
-       cwd = vim.fn.stdpath("data") .. "/lazy/nvim-plugin",
-     })
-   end, {})
-   ```
-
-### Contributing
-
-This is an educational example. Feel free to:
-- Fork and modify for your own learning
-- Use it as a template for your own plugins
-- Share with others learning Neovim plugin development
-
-## Learning Resources
-
-To learn more about Neovim plugin development:
-
-### Official Documentation
-- [Neovim Lua Guide](https://neovim.io/doc/user/lua-guide.html) - Official Lua integration guide
-- [Neovim API Documentation](https://neovim.io/doc/user/api.html) - Complete API reference
-- [LazyVim Documentation](https://www.lazyvim.org/) - LazyVim-specific patterns
-
-### Example Plugins to Study
-- [mini.nvim](https://github.com/echasnovski/mini.nvim) - Collection of minimal, independent plugins
-- [Comment.nvim](https://github.com/numToStr/Comment.nvim) - Simple, well-structured plugin
-- [telescope.nvim](https://github.com/nvim-telescope/telescope.nvim) - Advanced plugin architecture
-
-### Community Resources
-- [r/neovim](https://reddit.com/r/neovim) - Active community
-- [Neovim Discourse](https://neovim.discourse.group/) - Official forums
-- [awesome-neovim](https://github.com/rockerBOO/awesome-neovim) - Curated list of plugins
-
-## Key Concepts Demonstrated
-
-This plugin demonstrates the following Neovim plugin development concepts:
-
-### 1. Module Pattern
-Using a Lua table (`M`) to export public functions:
-```lua
-local M = {}
-function M.setup(opts)
-  -- initialization
-end
-return M
+### Structure
+```
+nvim-plugin/
+├── lua/nvim-plugin/init.lua  # Main plugin (well-commented)
+└── README.md                  # This file
 ```
 
-### 2. Setup Function
-Standard pattern for plugin initialization:
-```lua
-require("nvim-plugin").setup({ options })
-```
+### Key Concepts Demonstrated
+- **Module Pattern**: Lua table exports with `M.setup()`
+- **Configuration Merging**: `vim.tbl_deep_extend()` for user config
+- **Modern APIs**: `vim.api.nvim_create_user_command()`, `vim.keymap.set()`, `vim.notify()`
+- **State Management**: Runtime state separate from config
+- **LazyVim Integration**: Lazy-loading patterns and `opts` convention
+- **Documentation Parsing**: Programmatic parsing of Neovim's runtime `doc/index.txt` help file
+- **API Limitations**: Understanding what's queryable (user-defined commands/keymaps) vs. built-in (requires parsing)
+- **Buffer Management**: Creating scratch buffers for displaying formatted information
+- **Plugin Detection**: Extracting plugin names from keymap metadata
 
-### 3. Configuration Merging
-Using `vim.tbl_deep_extend()` to merge user config with defaults:
-```lua
-local config = vim.tbl_deep_extend("force", defaults, user_opts or {})
-```
-
-### 4. Modern Command API
-`vim.api.nvim_create_user_command()` instead of legacy `vim.cmd()`:
-```lua
-vim.api.nvim_create_user_command("CommandName", function()
-  -- command logic
-end, { desc = "Description" })
-```
-
-### 5. Modern Keymap API
-`vim.keymap.set()` instead of deprecated alternatives:
-```lua
-vim.keymap.set("n", "<leader>key", function()
-  -- keymap logic
-end, { desc = "Description" })
-```
-
-### 6. User Notifications
-`vim.notify()` for displaying messages:
-```lua
-vim.notify("Message", vim.log.levels.INFO)
-```
-
-### 7. State Management
-Maintaining runtime state separate from configuration:
-```lua
-local state = { enabled = true }
-```
-
-### 8. LazyVim Integration
-Proper setup for lazy-loading and configuration via LazyVim specs
-
-### 9. Educational Comments
-Extensive inline documentation explaining:
-- Why each pattern is used
-- What alternatives exist
-- How things work under the hood
+### Learning Resources
+- [Neovim Lua Guide](https://neovim.io/doc/user/lua-guide.html) - Official Lua integration
+- [Neovim API Docs](https://neovim.io/doc/user/api.html) - Complete API reference
+- [mini.nvim](https://github.com/echasnovski/mini.nvim) - Excellent plugin examples
 
 ## License
 
@@ -831,4 +199,4 @@ MIT
 
 ---
 
-**Note**: Replace `yourusername` with your actual GitHub username when publishing the plugin.
+**Note**: This is an educational example project. See `lua/nvim-plugin/init.lua` for extensively commented code explaining each concept.
