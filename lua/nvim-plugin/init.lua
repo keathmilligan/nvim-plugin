@@ -15,6 +15,9 @@ local M = {}
 -- Require the sidebar module for sidebar functionality
 local sidebar = require("nvim-plugin.sidebar")
 
+-- Require the floating sidebar module for floating window sidebar functionality
+local floating_sidebar = require("nvim-plugin.floating-sidebar")
+
 -- ============================================================================
 -- Default Configuration
 -- ============================================================================
@@ -55,6 +58,7 @@ local registered_keymaps = {
   { key = "<leader>pa", command = "NvimPluginAllKeybindings", desc = "Show all Neovim keybindings" },
   { key = "<leader>pc", command = "NvimPluginAllCommands", desc = "Show all Neovim commands" },
   { key = "<leader>ps", command = "NvimPluginSidebar", desc = "Toggle plugin sidebar" },
+  { key = "<leader>pf", command = "NvimPluginFloatingSidebar", desc = "Toggle floating plugin sidebar" },
 }
 
 -- ============================================================================
@@ -1047,6 +1051,27 @@ local function register_commands()
   end, {
     desc = "Close nvim-plugin sidebar",
   })
+  
+  -- :NvimPluginFloatingSidebar - Toggle the floating plugin sidebar
+  vim.api.nvim_create_user_command("NvimPluginFloatingSidebar", function()
+    floating_sidebar.toggle()
+  end, {
+    desc = "Toggle floating plugin sidebar",
+  })
+  
+  -- :NvimPluginFloatingSidebarOpen - Explicitly open the floating sidebar
+  vim.api.nvim_create_user_command("NvimPluginFloatingSidebarOpen", function()
+    floating_sidebar.open()
+  end, {
+    desc = "Open floating plugin sidebar",
+  })
+  
+  -- :NvimPluginFloatingSidebarClose - Explicitly close the floating sidebar
+  vim.api.nvim_create_user_command("NvimPluginFloatingSidebarClose", function()
+    floating_sidebar.close()
+  end, {
+    desc = "Close floating plugin sidebar",
+  })
 end
 
 -- ============================================================================
@@ -1107,6 +1132,13 @@ local function register_keymaps()
     sidebar.toggle()
   end, {
     desc = "Toggle plugin sidebar",
+  })
+  
+  -- <leader>pf - Plugin Floating sidebar (toggle floating sidebar)
+  vim.keymap.set("n", "<leader>pf", function()
+    floating_sidebar.toggle()
+  end, {
+    desc = "Toggle floating plugin sidebar",
   })
 end
 
